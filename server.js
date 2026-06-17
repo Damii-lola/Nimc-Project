@@ -123,6 +123,40 @@ app.post('/auth/verify-otp', async (req, res) => {
   return res.json({ message: 'OTP verified successfully.', email });
 });
 
+// ─── POST /auth/verify-nin ────────────────────────────────────────────────────
+app.post('/auth/verify-nin', async (req, res) => {
+  const { email, nin } = req.body;
+
+  if (!email || !nin) {
+    return res.status(400).json({ message: 'Email and NIN are required.' });
+  }
+
+  if (!/^\d{11}$/.test(nin)) {
+    return res.status(400).json({ message: 'NIN must be exactly 11 digits.' });
+  }
+
+  // Look up NIN in the registered_voters table
+  const { data, error } = await supabase
+    .from('registered_voters')
+    .select('nin, full_name, email, is_eligible')
+    .eq('nin', nin)
+    .single();
+
+  if (error || !data) {
+    return res.status(404).json({ message: 'NIN not found in the voter register. Please contact NIMC.' });
+  }
+
+  if (!data.is_eligible) {
+    return res.status(403).json({ message: 'This NIN has been marked ineligible to vote.' });
+  }
+
+  return res.json({
+    message: 'NIN verified successfully.',
+    full_name: data.full_name,
+    email: data.email,
+  });
+});
+
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/', (req, res) => res.json({ status: 'NIMC API running' }));
 
