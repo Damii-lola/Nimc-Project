@@ -235,6 +235,82 @@ app.post('/auth/reset-device', async (req, res) => {
   return res.json({ message: `Device binding reset for ${email}. They can now log in from any device.` });
 });
 
+// ─── GET /election/data ───────────────────────────────────────────────────────
+// Returns all positions and their candidates from Supabase
+app.get('/election/data', async (req, res) => {
+  const { data: positions, error: posErr } = await supabase
+    .from('positions')
+    .select('id, title, priority')
+    .order('priority', { ascending: true });
+
+  if (posErr) return res.status(500).json({ message: 'Failed to load positions.' });
+
+  const { data: candidates, error: canErr } = await supabase
+    .from('candidates')
+    .select('id, position_id, name, party');
+
+  if (canErr) return res.status(500).json({ message: 'Failed to load candidates.' });
+
+  // Group candidates under their positions
+  const result = positions.map(pos => ({
+    ...pos,
+    candidates: candidates.filter(c => c.position_id === pos.id),
+  }));
+
+  return res.json({ positions: result });
+});
+
+// ─── POST /election/check-voted ───────────────────────────────────────────────
+app.post('/election/check-voted', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: 'Email required.' });
+
+  const { data } = await supabase
+    .from('votes')
+    .select('id')
+    .eq('email', email)
+    .limit(1);
+
+  return res.json({ has_voted: data && data.length > 0 });
+});
+
+// ─── POST /election/submit-vote ───────────────────────────────────────────────
+app.post('/election/submit-vote', async (req, res) => {
+  const { email, votes } = req.body; // votes = { position_id: candidate_id }
+
+  if (!email || !votes || Object.keys(votes).length === 0) {
+    return res.status(400).json({ message: 'Email and votes are required.' });
+  }
+
+  // Check voter hasn't already voted
+  const { data: existing } = await supabase
+    .from('votes')
+    .select('id')
+    .eq('email', email)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    return res.status(403).json({ message: 'You have already submitted your vote.' });
+  }
+
+  // Insert one row per position
+  const rows = Object.entries(votes).map(([position_id, candidate_id]) => ({
+    email,
+    position_id,
+    candidate_id,
+    voted_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase.from('votes').insert(rows);
+
+  if (error) {
+    console.error('Vote insert error:', error);
+    return res.status(500).json({ message: 'Failed to record vote.' });
+  }
+
+  return res.json({ message: 'Vote submitted successfully.' });
+});
+
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/', (req, res) => res.json({ status: 'NIMC API running' }));
 
