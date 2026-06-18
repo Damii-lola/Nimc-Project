@@ -23,13 +23,17 @@ function generateOtp() {
 
 // ─── POST /auth/send-otp ──────────────────────────────────────────────────────
 app.post('/auth/send-otp', async (req, res) => {
-  const { email } = req.body;
+  const { email, device_id } = req.body;
 
   if (!email || !email.includes('@')) {
     return res.status(400).json({ message: 'Invalid email address.' });
   }
 
-  // ── Check email exists in registered_voters before doing anything ──
+  if (!device_id) {
+    return res.status(400).json({ message: 'Device ID is required.' });
+  }
+
+  // ── 1. Check email exists in registered_voters ────────────────────────────
   const { data: voter, error: voterError } = await supabase
     .from('registered_voters')
     .select('email')
@@ -42,10 +46,23 @@ app.post('/auth/send-otp', async (req, res) => {
     });
   }
 
-  const otp       = generateOtp();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  // ── 2. Check device binding ───────────────────────────────────────────────
+  const { data: binding } = await supabase
+    .from('device_bindings')
+    .select('device_id')
+    .ilike('email', email.trim())
+    .single();
 
-  // Upsert OTP into Supabase
+  if (binding && binding.device_id !== device_id) {
+    return res.status(403).json({
+      message: 'This account is bound to a different device. Please contact NIMC to reset access.',
+    });
+  }
+
+  // ── 3. Generate & store OTP ───────────────────────────────────────────────
+  const otp       = generateOtp();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
   const { error: dbError } = await supabase
     .from('otp_codes')
     .upsert(
@@ -58,7 +75,7 @@ app.post('/auth/send-otp', async (req, res) => {
     return res.status(500).json({ message: 'Failed to store OTP.' });
   }
 
-  // Send email via Resend
+  // ── 4. Send OTP email ─────────────────────────────────────────────────────
   const { error: emailError } = await resend.emails.send({
     from: 'NIMC Voting Portal <onboarding@resend.dev>',
     to: email,
@@ -137,18 +154,23 @@ app.post('/auth/verify-otp', async (req, res) => {
 });
 
 // ─── POST /auth/verify-nin ────────────────────────────────────────────────────
+// Called after OTP is verified — this is where device binding is saved
 app.post('/auth/verify-nin', async (req, res) => {
-  const { email, nin } = req.body;
+  const { email, nin, device_id } = req.body;
 
   if (!email || !nin) {
     return res.status(400).json({ message: 'Email and NIN are required.' });
+  }
+
+  if (!device_id) {
+    return res.status(400).json({ message: 'Device ID is required.' });
   }
 
   if (!/^\d{11}$/.test(nin)) {
     return res.status(400).json({ message: 'NIN must be exactly 11 digits.' });
   }
 
-  // Look up NIN in the registered_voters table
+  // ── 1. Verify NIN exists and is eligible ──────────────────────────────────
   const { data, error } = await supabase
     .from('registered_voters')
     .select('nin, first_name, last_name, email, is_eligible')
@@ -163,11 +185,54 @@ app.post('/auth/verify-nin', async (req, res) => {
     return res.status(403).json({ message: 'This NIN has been marked ineligible to vote.' });
   }
 
+  // ── 2. Bind device to this voter (upsert — safe to call multiple times) ───
+  const { error: bindError } = await supabase
+    .from('device_bindings')
+    .upsert(
+      {
+        email:      email.toLowerCase().trim(),
+        nin,
+        device_id,
+        bound_at:   new Date().toISOString(),
+      },
+      { onConflict: 'email' }
+    );
+
+  if (bindError) {
+    console.error('Device bind error:', bindError);
+    return res.status(500).json({ message: 'Failed to bind device.' });
+  }
+
   return res.json({
-    message: 'NIN verified successfully.',
+    message: 'NIN verified and device bound successfully.',
     full_name: `${data.first_name} ${data.last_name}`,
-    email: data.email,
   });
+});
+
+// ─── POST /auth/reset-device ──────────────────────────────────────────────────
+// FOR TESTING ONLY — removes device binding so voter can log in from any device
+app.post('/auth/reset-device', async (req, res) => {
+  const { email, admin_key } = req.body;
+
+  // Simple admin key guard — set ADMIN_KEY as a Render env variable
+  if (admin_key !== process.env.ADMIN_KEY) {
+    return res.status(401).json({ message: 'Unauthorized.' });
+  }
+
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required.' });
+  }
+
+  const { error } = await supabase
+    .from('device_bindings')
+    .delete()
+    .ilike('email', email.trim());
+
+  if (error) {
+    return res.status(500).json({ message: 'Failed to reset device binding.' });
+  }
+
+  return res.json({ message: `Device binding reset for ${email}. They can now log in from any device.` });
 });
 
 // ─── Health check ─────────────────────────────────────────────────────────────
