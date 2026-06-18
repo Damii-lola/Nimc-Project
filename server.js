@@ -138,7 +138,7 @@ app.post('/auth/verify-nin', async (req, res) => {
   // Look up NIN in the registered_voters table
   const { data, error } = await supabase
     .from('registered_voters')
-    .select('nin, full_name, email, is_eligible')
+    .select('nin, first_name, last_name, email, is_eligible')
     .eq('nin', nin)
     .single();
 
@@ -152,7 +152,7 @@ app.post('/auth/verify-nin', async (req, res) => {
 
   return res.json({
     message: 'NIN verified successfully.',
-    full_name: data.full_name,
+    full_name: `${data.first_name} ${data.last_name}`,
     email: data.email,
   });
 });
