@@ -29,6 +29,19 @@ app.post('/auth/send-otp', async (req, res) => {
     return res.status(400).json({ message: 'Invalid email address.' });
   }
 
+  // ── Check email exists in registered_voters before doing anything ──
+  const { data: voter, error: voterError } = await supabase
+    .from('registered_voters')
+    .select('email')
+    .ilike('email', email.trim())
+    .single();
+
+  if (voterError || !voter) {
+    return res.status(403).json({
+      message: 'This email is not registered in the NIMC voter database. Please contact NIMC.',
+    });
+  }
+
   const otp       = generateOtp();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
