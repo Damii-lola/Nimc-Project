@@ -311,6 +311,64 @@ app.post('/election/submit-vote', async (req, res) => {
   return res.json({ message: 'Vote submitted successfully.' });
 });
 
+// ─── GET /election/results ────────────────────────────────────────────────────
+// Powers the leaderboard dashboard — returns vote counts per candidate
+app.get('/election/results', async (req, res) => {
+  // Positions ordered by priority
+  const { data: positions, error: posErr } = await supabase
+    .from('positions')
+    .select('id, title, priority')
+    .order('priority', { ascending: true });
+
+  if (posErr) return res.status(500).json({ message: 'Failed to load positions.' });
+
+  // All candidates
+  const { data: candidates, error: canErr } = await supabase
+    .from('candidates')
+    .select('id, position_id, name, party');
+
+  if (canErr) return res.status(500).json({ message: 'Failed to load candidates.' });
+
+  // Vote counts per candidate
+  const { data: votes, error: voteErr } = await supabase
+    .from('votes')
+    .select('candidate_id');
+
+  if (voteErr) return res.status(500).json({ message: 'Failed to load votes.' });
+
+  // Tally votes
+  const tally = {};
+  votes.forEach(v => { tally[v.candidate_id] = (tally[v.candidate_id] || 0) + 1; });
+
+  // Total unique voters who voted
+  const { data: voterCount } = await supabase
+    .from('registered_voters')
+    .select('id', { count: 'exact', head: true });
+
+  const { data: votedCount } = await supabase
+    .from('votes')
+    .select('email')
+    .limit(10000);
+
+  const uniqueVoters = new Set(votedCount?.map(v => v.email) || []).size;
+
+  // Build result
+  const result = positions.map(pos => ({
+    ...pos,
+    candidates: candidates
+      .filter(c => c.position_id === pos.id)
+      .map(c => ({ ...c, votes: tally[c.id] || 0 }))
+      .sort((a, b) => b.votes - a.votes),
+  }));
+
+  return res.json({
+    positions:            result,
+    total_votes:          votes.length,
+    total_voters:         voterCount?.length || 318,
+    total_voters_voted:   uniqueVoters,
+  });
+});
+
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/', (req, res) => res.json({ status: 'NIMC API running' }));
 
