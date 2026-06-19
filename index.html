@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NIMC Election Results — Live Leaderboard</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:      #00703C;
+      --green-deep: #004D2A;
+      --green-light:#E6F4EE;
+      --gold:       #C8972B;
+      --gold-light: #FDF6E3;
+      --ink:        #0D1117;
+      --muted:      #6B7280;
+      --border:     #E5E7EB;
+      --white:      #FFFFFF;
+      --off:        #F7F8FA;
+      --silver:     #9CA3AF;
+      --bronze:     #B45309;
+    }
+
+    body { font-family: 'Inter', sans-serif; background: var(--off); color: var(--ink); min-height: 100vh; }
+
+    /* ── Header ── */
+    .header {
+      background: var(--green-deep); padding: 0 32px;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 72px; position: sticky; top: 0; z-index: 100;
+      border-bottom: 4px solid var(--gold);
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .crest { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .shield {
+      width: 32px; height: 38px; background: var(--gold);
+      border-radius: 5px 5px 16px 16px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .shield-bars { display: flex; flex-direction: column; gap: 3px; align-items: center; }
+    .shield-bar { height: 3px; background: var(--green-deep); border-radius: 2px; }
+    .crest-base { width: 36px; height: 5px; background: var(--gold); border-radius: 2px; }
+    .header-title { color: var(--gold); font-size: 22px; font-weight: 900; letter-spacing: 3px; }
+    .header-sub { color: rgba(255,255,255,0.6); font-size: 11px; margin-top: 2px; }
+    .live-badge {
+      display: flex; align-items: center; gap: 7px;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 20px; padding: 6px 14px;
+    }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #22C55E; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.85); } }
+    .live-text { color: rgba(255,255,255,0.8); font-size: 12px; font-weight: 600; }
+
+    /* ── Page ── */
+    .page { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    /* ── Hero ── */
+    .election-hero { text-align: center; margin-bottom: 48px; }
+    .election-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: var(--green); text-transform: uppercase; margin-bottom: 10px; }
+    .election-title { font-size: 36px; font-weight: 900; color: var(--ink); letter-spacing: -0.5px; line-height: 1.15; margin-bottom: 8px; }
+    .election-subtitle { font-size: 14px; color: var(--muted); }
+    .election-stats { display: flex; justify-content: center; gap: 32px; margin-top: 28px; flex-wrap: wrap; }
+    .stat { text-align: center; }
+    .stat-num { font-size: 30px; font-weight: 900; color: var(--green); }
+    .stat-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+    /* ── Refresh ── */
+    .refresh-btn {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--green-light); border: 1.5px solid var(--green);
+      color: var(--green); border-radius: 8px; padding: 8px 18px;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      margin: 0 auto 36px; transition: background 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    .refresh-btn:hover { background: #d0ead9; }
+
+    /* ── Loading ── */
+    .loading-bar { width:100%; height:3px; background:var(--border); border-radius:2px; overflow:hidden; margin-bottom:40px; display:none; }
+    .loading-fill { height:100%; width:40%; background:var(--green); border-radius:2px; animation:loading 1.2s infinite ease-in-out; }
+    @keyframes loading { 0% { transform:translateX(-100%); } 100% { transform:translateX(350%); } }
+
+    /* ── Position section ── */
+    .position-section { margin-bottom: 48px; }
+    .position-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .position-bar { flex: 1; height: 2px; background: var(--border); }
+    .position-title { font-size: 13px; font-weight: 800; color: var(--green-deep); text-transform: uppercase; letter-spacing: 1.5px; white-space: nowrap; }
+
+    /* ── Candidate rows ── */
+    .candidates { display: flex; flex-direction: column; gap: 10px; }
+    .candidate-row {
+      background: var(--white); border: 1.5px solid var(--border);
+      border-radius: 14px; display: flex; align-items: center; gap: 16px;
+      padding: 14px 20px; transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .candidate-row:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+    .candidate-row.rank-1 { border-color: var(--gold); background: var(--gold-light); }
+    .candidate-row.rank-2 { border-color: var(--silver); }
+    .candidate-row.rank-3 { border-color: var(--bronze); }
+
+    .rank-badge {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 900; flex-shrink: 0;
+    }
+    .rank-badge.r1 { background: var(--gold); color: var(--green-deep); }
+    .rank-badge.r2 { background: var(--silver); color: var(--white); }
+    .rank-badge.r3 { background: var(--bronze); color: var(--white); }
+    .rank-badge.rn { background: var(--off); color: var(--muted); border: 1.5px solid var(--border); }
+
+    .avatar {
+      width: 46px; height: 46px; border-radius: 50%;
+      background: var(--green-deep); display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 800; color: var(--gold);
+      border: 2.5px solid var(--gold); flex-shrink: 0;
+    }
+
+    .candidate-info { flex: 1; min-width: 0; }
+    .candidate-name { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .candidate-party { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    .vote-section { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; min-width: 110px; }
+    .vote-count { font-size: 22px; font-weight: 900; color: var(--green-deep); line-height: 1; }
+    .vote-label { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .vote-bar-track { width: 110px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .vote-bar-fill { height: 100%; border-radius: 3px; background: var(--green); transition: width 0.9s cubic-bezier(0.4,0,0.2,1); }
+    .rank-1 .vote-bar-fill { background: var(--gold); }
+
+    /* ── Empty ── */
+    .empty { text-align: center; padding: 60px 0; color: var(--muted); }
+    .empty-icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-title { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
+    .empty-sub { font-size: 13px; }
+
+    /* ── Footer ── */
+    .footer { text-align: center; margin-top: 60px; font-size: 11px; color: var(--muted); line-height: 2; }
+
+    @media (max-width: 600px) {
+      .header { padding: 0 16px; }
+      .page { padding: 24px 12px 60px; }
+      .election-title { font-size: 26px; }
+      .election-stats { gap: 16px; }
+      .vote-section { min-width: 80px; }
+      .vote-bar-track { width: 80px; }
+      .candidate-name { font-size: 14px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-left">
+      <div class="crest">
+        <div class="shield">
+          <div class="shield-bars">
+            <div class="shield-bar" style="width:20px"></div>
+            <div class="shield-bar" style="width:14px"></div>
+            <div class="shield-bar" style="width:10px"></div>
+          </div>
+        </div>
+        <div class="crest-base"></div>
+      </div>
+      <div>
+        <div class="header-title">NIMC</div>
+        <div class="header-sub">National Identity Management Commission</div>
+      </div>
+    </div>
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      <span class="live-text">Live Results</span>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="election-hero">
+      <div class="election-eyebrow">2026 General Election</div>
+      <h1 class="election-title">Live Vote Leaderboard</h1>
+      <p class="election-subtitle">Results update automatically every 30 seconds</p>
+      <div class="election-stats">
+        <div class="stat">
+          <div class="stat-num" id="total-votes">—</div>
+          <div class="stat-label">Total Votes Cast</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num" id="total-voters">—</div>
+          <div class="stat-label">Registered Voters</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num" id="turnout">—%</div>
+          <div class="stat-label">Voter Turnout</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="refresh-btn" onclick="loadResults()">↻ &nbsp;Refresh Results</button>
+
+    <div class="loading-bar" id="loading-bar"><div class="loading-fill"></div></div>
+
+    <div id="results"></div>
+
+    <footer class="footer">
+      © 2026 National Identity Management Commission<br>
+      Federal Republic of Nigeria — All rights reserved<br>
+      Results are live and subject to change until polls close.
+    </footer>
+  </main>
+
+  <script>
+    const API_URL = 'https://your-render-app.onrender.com';
+
+    function rankBadge(rank) {
+      const cls   = rank === 1 ? 'r1' : rank === 2 ? 'r2' : rank === 3 ? 'r3' : 'rn';
+      const label = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+      return `<div class="rank-badge ${cls}">${label}</div>`;
+    }
+
+    function buildPosition(position) {
+      const candidates = [...position.candidates].sort((a, b) => b.votes - a.votes);
+      const maxVotes   = candidates[0]?.votes || 1;
+
+      const rows = candidates.map((c, i) => {
+        const rank    = i + 1;
+        const rankCls = rank <= 3 ? `rank-${rank}` : '';
+        const pct     = maxVotes > 0 ? Math.round((c.votes / maxVotes) * 100) : 0;
+        return `
+          <div class="candidate-row ${rankCls}">
+            ${rankBadge(rank)}
+            <div class="avatar">${c.name[0].toUpperCase()}</div>
+            <div class="candidate-info">
+              <div class="candidate-name">${c.name}</div>
+              ${c.party ? `<div class="candidate-party">${c.party}</div>` : ''}
+            </div>
+            <div class="vote-section">
+              <div>
+                <span class="vote-count">${c.votes.toLocaleString()}</span>
+                <span class="vote-label"> votes</span>
+              </div>
+              <div class="vote-bar-track">
+                <div class="vote-bar-fill" style="width:${pct}%"></div>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+
+      return `
+        <div class="position-section">
+          <div class="position-header">
+            <div class="position-bar"></div>
+            <div class="position-title">${position.title}</div>
+            <div class="position-bar"></div>
+          </div>
+          <div class="candidates">${rows}</div>
+        </div>`;
+    }
+
+    async function loadResults() {
+      document.getElementById('loading-bar').style.display = 'block';
+      try {
+        const res  = await fetch(`${API_URL}/election/results`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+
+        document.getElementById('total-votes').textContent  = data.total_votes.toLocaleString();
+        document.getElementById('total-voters').textContent = data.total_voters.toLocaleString();
+        const turnout = data.total_voters > 0
+          ? Math.round((data.total_voters_voted / data.total_voters) * 100) : 0;
+        document.getElementById('turnout').textContent = turnout + '%';
+
+        const html = data.positions.length
+          ? data.positions.map(buildPosition).join('')
+          : `<div class="empty"><div class="empty-icon">🗳️</div><div class="empty-title">No votes recorded yet</div><div class="empty-sub">Results will appear here as votes are cast.</div></div>`;
+        document.getElementById('results').innerHTML = html;
+      } catch (err) {
+        document.getElementById('results').innerHTML = `
+          <div class="empty">
+            <div class="empty-icon">⚠️</div>
+            <div class="empty-title">Could not load results</div>
+            <div class="empty-sub">${err.message || 'Check your connection and try again.'}</div>
+          </div>`;
+      } finally {
+        document.getElementById('loading-bar').style.display = 'none';
+      }
+    }
+
+    loadResults();
+    setInterval(loadResults, 30000);
+  </script>
+</body>
+</html>
