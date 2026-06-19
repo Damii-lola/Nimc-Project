@@ -4,7 +4,14 @@ const { Resend } = require('resend');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://damii-lola.github.io',
+    'http://localhost:3000',
+    'http://localhost:19006',
+  ],
+  methods: ['GET', 'POST'],
+}));
 app.use(express.json());
 
 // ─── Resend setup ─────────────────────────────────────────────────────────────
