@@ -1,6 +1,6 @@
 const express = require('express');
 const cors    = require('cors');
-const nodemailer = require('nodemailer');
+const Mailjet = require('node-mailjet');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
@@ -14,19 +14,11 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// ─── Nodemailer (Gmail SMTP) setup ────────────────────────────────────────────
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_PASS,
-  },
-  connectionTimeout: 30000,
-  greetingTimeout:   30000,
-  socketTimeout:     30000,
-});
+// ─── Mailjet setup ────────────────────────────────────────────────────────────
+const mailjet = Mailjet.apiConnect(
+  process.env.MAILJET_API_KEY,
+  process.env.MAILJET_SECRET_KEY
+);
 
 // ─── Supabase client ──────────────────────────────────────────────────────────
 const supabase = createClient(
@@ -93,40 +85,31 @@ app.post('/auth/send-otp', async (req, res) => {
     return res.status(500).json({ message: 'Failed to store OTP.' });
   }
 
-  // ── 4. Send OTP email via Gmail SMTP ─────────────────────────────────────
+  // ── 4. Send OTP email via Mailjet ────────────────────────────────────────
   try {
-    await transporter.sendMail({
-      from: `"NIMC Voting Portal" <${process.env.GMAIL_USER}>`,
-      to: email,
-      subject: 'Your NIMC Voting OTP',
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:auto;">
-          <div style="background:#004D2A;padding:24px;text-align:center;">
-            <h1 style="color:#C8972B;margin:0;letter-spacing:4px;">NIMC</h1>
-            <p style="color:rgba(255,255,255,0.75);margin:4px 0 0;font-size:12px;">
-              National Identity Management Commission
-            </p>
-          </div>
-          <div style="background:#F7F8FA;padding:32px;">
-            <p style="color:#0D1117;font-size:15px;">Your one-time passcode is:</p>
-            <div style="background:#fff;border:2px solid #00703C;border-radius:12px;padding:20px;text-align:center;margin:16px 0;">
-              <span style="font-size:36px;font-weight:800;letter-spacing:10px;color:#004D2A;">${otp}</span>
+    await mailjet.post('send', { version: 'v3.1' }).request({
+      Messages: [{
+        From: { Email: process.env.MAILJET_FROM_EMAIL, Name: 'NIMC Voting Portal' },
+        To:   [{ Email: email }],
+        Subject: `${otp} is your NIMC voting code`,
+        TextPart: `Your NIMC voting verification code is: ${otp}\n\nThis code expires in 10 minutes. Do not share it with anyone.\n\n- NIMC Voting Portal`,
+        HTMLPart: `
+          <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:20px;">
+            <p style="font-size:15px;color:#0D1117;">Hello,</p>
+            <p style="font-size:15px;color:#0D1117;">Your NIMC voting verification code is:</p>
+            <div style="background:#f7f8fa;border:1px solid #e5e7eb;border-radius:8px;padding:24px;text-align:center;margin:20px 0;">
+              <span style="font-size:36px;font-weight:bold;letter-spacing:10px;color:#004D2A;">${otp}</span>
             </div>
-            <p style="color:#6B7280;font-size:13px;">
-              This code expires in <strong>10 minutes</strong>.<br/>
-              Never share this code with anyone.
-            </p>
+            <p style="font-size:13px;color:#6B7280;">This code expires in <strong>10 minutes</strong>. Do not share it with anyone.</p>
+            <p style="font-size:13px;color:#6B7280;">If you did not request this code, please ignore this email.</p>
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;" />
+            <p style="font-size:11px;color:#9ca3af;">National Identity Management Commission &mdash; Federal Republic of Nigeria</p>
           </div>
-          <div style="background:#004D2A;padding:12px;text-align:center;">
-            <p style="color:rgba(255,255,255,0.5);font-size:11px;margin:0;">
-              © 2026 NIMC — Federal Republic of Nigeria
-            </p>
-          </div>
-        </div>
-      `,
+        `,
+      }],
     });
   } catch (emailErr) {
-    console.error('Gmail SMTP error:', emailErr);
+    console.error('Mailjet error:', emailErr.statusCode, emailErr.message);
     return res.status(500).json({ message: 'Failed to send OTP email.' });
   }
 
