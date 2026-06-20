@@ -16,11 +16,16 @@ app.use(express.json());
 
 // ─── Nodemailer (Gmail SMTP) setup ────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
   auth: {
-    user: process.env.GMAIL_USER,  // your gmail e.g. sifonudobong@gmail.com
-    pass: process.env.GMAIL_PASS,  // Gmail App Password (16-char code from Google)
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_PASS,
   },
+  connectionTimeout: 30000,
+  greetingTimeout:   30000,
+  socketTimeout:     30000,
 });
 
 // ─── Supabase client ──────────────────────────────────────────────────────────
